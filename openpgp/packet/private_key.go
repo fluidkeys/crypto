@@ -164,11 +164,13 @@ func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 		return
 	}
 
+	checksumBytes := getChecksumBytes(privateKeyBytes)
+
 	ptype := packetTypePrivateKey
 	if pk.IsSubkey {
 		ptype = packetTypePrivateSubkey
 	}
-	err = serializeHeader(w, ptype, len(publicKeyBytes)+len(privateKeyHeaderBytes)+len(privateKeyBytes)+2)
+	err = serializeHeader(w, ptype, len(publicKeyBytes)+len(privateKeyHeaderBytes)+len(privateKeyBytes)+len(checksumBytes))
 	if err != nil {
 		return
 	}
@@ -187,11 +189,10 @@ func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 		return
 	}
 
-	checksum := mod64kHash(privateKeyBytes)
-	var checksumBytes [2]byte
-	checksumBytes[0] = byte(checksum >> 8)
-	checksumBytes[1] = byte(checksum)
 	_, err = w.Write(checksumBytes[:])
+	if err != nil {
+		return
+	}
 
 	return
 }
@@ -230,6 +231,14 @@ func getPrivateKeyBytes(pk *PrivateKey) (b []byte, err error) {
 		return nil, err
 	}
 	return privateKeyBuf.Bytes(), nil
+}
+
+func getChecksumBytes(privateKeyBytes []byte) [2]byte {
+	checksum := mod64kHash(privateKeyBytes)
+	var checksumBytes [2]byte
+	checksumBytes[0] = byte(checksum >> 8)
+	checksumBytes[1] = byte(checksum)
+	return checksumBytes
 }
 
 func serializeRSAPrivateKey(w io.Writer, priv *rsa.PrivateKey) error {
