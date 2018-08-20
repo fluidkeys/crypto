@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package twofish implements Bruce Schneier's Twofish encryption algorithm.
-package twofish // import "golang.org/x/crypto/twofish"
+package twofish // import "github.com/fluidkeys/crypto/twofish"
 
 // Twofish is defined in https://www.schneier.com/paper-twofish-paper.pdf [TWOFISH]
 
