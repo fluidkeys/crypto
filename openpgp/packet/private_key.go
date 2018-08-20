@@ -159,12 +159,14 @@ func mod64kHash(d []byte) uint16 {
 
 func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 	// TODO(agl): support encrypted private keys
-	buf := bytes.NewBuffer(nil)
-	err = pk.PublicKey.serializeWithoutHeaders(buf)
+
+	publicKeyBytes, err := getPublicKeyBytes(pk)
+
 	if err != nil {
 		return
 	}
-	buf.WriteByte(0 /* no encryption */)
+
+	privateKeyHeaderBytes, err := getPrivateKeyHeaderBytes(pk)
 
 	privateKeyBytes, err := getPrivateKeyBytes(pk)
 	if err != nil {
@@ -172,18 +174,23 @@ func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 	}
 
 	ptype := packetTypePrivateKey
-	contents := buf.Bytes()
 	if pk.IsSubkey {
 		ptype = packetTypePrivateSubkey
 	}
-	err = serializeHeader(w, ptype, len(contents)+len(privateKeyBytes)+2)
+	err = serializeHeader(w, ptype, len(publicKeyBytes)+len(privateKeyHeaderBytes)+len(privateKeyBytes)+2)
 	if err != nil {
 		return
 	}
-	_, err = w.Write(contents)
+	_, err = w.Write(publicKeyBytes)
 	if err != nil {
 		return
 	}
+
+	_, err = w.Write(privateKeyHeaderBytes)
+	if err != nil {
+		return
+	}
+
 	_, err = w.Write(privateKeyBytes)
 	if err != nil {
 		return
@@ -196,6 +203,21 @@ func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 	_, err = w.Write(checksumBytes[:])
 
 	return
+}
+
+func getPublicKeyBytes(pk *PrivateKey) (b []byte, err error) {
+	buf := bytes.NewBuffer(nil)
+	err = pk.PublicKey.serializeWithoutHeaders(buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func getPrivateKeyHeaderBytes(pk *PrivateKey) (b []byte, err error) {
+	buf := bytes.NewBuffer(nil)
+	buf.WriteByte(0 /* no encryption */)
+	return buf.Bytes(), nil
 }
 
 func getPrivateKeyBytes(pk *PrivateKey) (b []byte, err error) {
