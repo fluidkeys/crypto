@@ -166,27 +166,13 @@ func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 	}
 	buf.WriteByte(0 /* no encryption */)
 
-	privateKeyBuf := bytes.NewBuffer(nil)
-
-	switch priv := pk.PrivateKey.(type) {
-	case *rsa.PrivateKey:
-		err = serializeRSAPrivateKey(privateKeyBuf, priv)
-	case *dsa.PrivateKey:
-		err = serializeDSAPrivateKey(privateKeyBuf, priv)
-	case *elgamal.PrivateKey:
-		err = serializeElGamalPrivateKey(privateKeyBuf, priv)
-	case *ecdsa.PrivateKey:
-		err = serializeECDSAPrivateKey(privateKeyBuf, priv)
-	default:
-		err = errors.InvalidArgumentError("unknown private key type")
-	}
+	privateKeyBytes, err := getPrivateKeyBytes(pk)
 	if err != nil {
 		return
 	}
 
 	ptype := packetTypePrivateKey
 	contents := buf.Bytes()
-	privateKeyBytes := privateKeyBuf.Bytes()
 	if pk.IsSubkey {
 		ptype = packetTypePrivateSubkey
 	}
@@ -210,6 +196,27 @@ func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
 	_, err = w.Write(checksumBytes[:])
 
 	return
+}
+
+func getPrivateKeyBytes(pk *PrivateKey) (b []byte, err error) {
+	privateKeyBuf := bytes.NewBuffer(nil)
+
+	switch priv := pk.PrivateKey.(type) {
+	case *rsa.PrivateKey:
+		err = serializeRSAPrivateKey(privateKeyBuf, priv)
+	case *dsa.PrivateKey:
+		err = serializeDSAPrivateKey(privateKeyBuf, priv)
+	case *elgamal.PrivateKey:
+		err = serializeElGamalPrivateKey(privateKeyBuf, priv)
+	case *ecdsa.PrivateKey:
+		err = serializeECDSAPrivateKey(privateKeyBuf, priv)
+	default:
+		err = errors.InvalidArgumentError("unknown private key type")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return privateKeyBuf.Bytes(), nil
 }
 
 func serializeRSAPrivateKey(w io.Writer, priv *rsa.PrivateKey) error {
