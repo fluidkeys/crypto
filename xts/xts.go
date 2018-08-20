@@ -19,14 +19,14 @@
 //
 // (Note: this package does not implement ciphertext-stealing so sectors must
 // be a multiple of 16 bytes.)
-package xts // import "golang.org/x/crypto/xts"
+package xts // import "github.com/fluidkeys/crypto/xts"
 
 import (
 	"crypto/cipher"
 	"encoding/binary"
 	"errors"
 
-	"golang.org/x/crypto/internal/subtle"
+	"github.com/fluidkeys/crypto/internal/subtle"
 )
 
 // Cipher contains an expanded key structure. It doesn't contain mutable state
