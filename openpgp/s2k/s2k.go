@@ -16,6 +16,12 @@ import (
 )
 
 const (
+	S2KCountUnsafeMin = 1024
+	S2KCountMin       = 65536
+	S2KCountMax       = 65011712
+)
+
+const (
 	// https://tools.ietf.org/html/rfc4880#section-3.7.1.1
 	SimpleS2K = 0x00
 
