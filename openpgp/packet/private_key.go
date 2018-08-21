@@ -175,10 +175,8 @@ func (pk *PrivateKey) Serialize(w io.Writer, config *Config) (err error) {
 
 	checksumBytes := getChecksumBytes(privateKeyBytes)
 
-	ptype := packetTypePrivateKey
-	if pk.IsSubkey {
-		ptype = packetTypePrivateSubkey
-	}
+	ptype := getPrivateKeyPacketType(pk)
+
 	err = serializeHeader(w, ptype, len(publicKeyBytes)+len(privateKeyHeaderBytes)+len(privateKeyBytes)+len(checksumBytes))
 	if err != nil {
 		return
@@ -203,6 +201,16 @@ func (pk *PrivateKey) Serialize(w io.Writer, config *Config) (err error) {
 		return
 	}
 
+	return
+}
+
+
+func getPrivateKeyPacketType(pk *PrivateKey) (ptype packetType) {
+	if pk.IsSubkey {
+		ptype = packetTypePrivateSubkey
+	} else {
+		ptype = packetTypePrivateKey
+	}
 	return
 }
 
