@@ -157,7 +157,7 @@ func mod64kHash(d []byte) uint16 {
 	return h
 }
 
-func (pk *PrivateKey) Serialize(w io.Writer) (err error) {
+func (pk *PrivateKey) Serialize(w io.Writer, config *Config) (err error) {
 	// TODO(agl): support encrypted private keys
 
 	publicKeyBytes, err := getPublicKeyBytes(pk)
