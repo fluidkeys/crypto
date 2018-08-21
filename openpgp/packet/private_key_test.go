@@ -82,7 +82,7 @@ func TestRSAPrivateKey(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := NewRSAPrivateKey(time.Now(), rsaPriv).Serialize(&buf); err != nil {
+	if err := NewRSAPrivateKey(time.Now(), rsaPriv).Serialize(&buf, &Config{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +125,7 @@ func TestECDSAPrivateKey(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := NewECDSAPrivateKey(time.Now(), ecdsaPriv).Serialize(&buf); err != nil {
+	if err := NewECDSAPrivateKey(time.Now(), ecdsaPriv).Serialize(&buf, &Config{}); err != nil {
 		t.Fatal(err)
 	}
 

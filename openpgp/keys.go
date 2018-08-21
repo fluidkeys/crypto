@@ -565,7 +565,7 @@ func NewEntity(name, comment, email string, config *packet.Config) (*Entity, err
 // Identities and subkeys are re-signed in case they changed since NewEntry.
 // If config is nil, sensible defaults will be used.
 func (e *Entity) SerializePrivate(w io.Writer, config *packet.Config) (err error) {
-	err = e.PrivateKey.Serialize(w)
+	err = e.PrivateKey.Serialize(w, config)
 	if err != nil {
 		return
 	}
@@ -584,7 +584,7 @@ func (e *Entity) SerializePrivate(w io.Writer, config *packet.Config) (err error
 		}
 	}
 	for _, subkey := range e.Subkeys {
-		err = subkey.PrivateKey.Serialize(w)
+		err = subkey.PrivateKey.Serialize(w, config)
 		if err != nil {
 			return
 		}
