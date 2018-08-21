@@ -104,7 +104,7 @@ func (pk *PrivateKey) parse(r io.Reader) (err error) {
 	s2kType := buf[0]
 
 	switch s2kType {
-	case 0:
+	case S2KUsageConventionUnencrypted:
 		pk.s2k = nil
 		pk.Encrypted = false
 	case S2KUsageConventionEncryptedSha1, S2KUsageConventionPlaintextChecksum:
