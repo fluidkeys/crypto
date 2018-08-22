@@ -10,6 +10,7 @@ import (
 	"crypto/cipher"
 	"crypto/dsa"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"fmt"
@@ -159,7 +160,17 @@ func mod64kHash(d []byte) uint16 {
 }
 
 func (pk *PrivateKey) Serialize(w io.Writer, config *Config) (err error) {
-	// TODO(agl): support encrypted private keys
+	if config.SerializePrivatePassword == "" {
+		return pk.SerializeUnencrypted(w)
+	} else {
+		buf := bytes.NewBuffer(nil)
+		err := pk.SerializeEncrypted(buf, config)
+		w.Write(buf.Bytes())
+		return err
+	}
+}
+
+func (pk *PrivateKey) SerializeUnencrypted(w io.Writer) (err error) {
 
 	publicKeyBytes, err := getPublicKeyBytes(pk)
 
@@ -205,6 +216,118 @@ func (pk *PrivateKey) Serialize(w io.Writer, config *Config) (err error) {
 	return
 }
 
+/* it should ultimately look like this (from `pgpdump`)
+
+   packet   /   New: Secret Key Packet(tag 5)(1862 bytes)
+   header   \   Ver 4 - new
+
+            /   Public key creation time - Thu Feb 23 11:57:49 GMT 2017
+   public   |   Pub alg - RSA Encrypt or Sign(pub 1)
+      key   |   RSA n(4096 bits) - ...
+            \   RSA e(17 bits) - ...
+
+
+            /   Sym alg - AES with 128-bit key(sym 7)
+encryption  |   Iterated and salted string-to-key(s2k 3):
+    header  |   	Hash alg - SHA1(hash 2)
+   (algo +  |   	Salt - 5a d7 95 6d 28 ac af 2c
+    S2K)    \   	Count - 62914560(coded count 254)
+
+            /   IV - da c5 6d dc 34 c6 2d f7 dc 68 e0 b4 19 a3 62 49
+            |   Encrypted RSA d
+ crypto     |   Encrypted RSA p
+  data      |   Encrypted RSA q
+            |   Encrypted RSA u
+            \   Encrypted SHA1 hash
+
+*/
+
+func (pk *PrivateKey) SerializeEncrypted(w io.Writer, config *Config) (err error) {
+	cipher := CipherAES128 // TODO: don't hardcode, get from Config?
+	password := config.SerializePrivatePassword
+
+	if password == "" {
+		return errors.InvalidArgumentError("SerializeEncrypted called with empty config.SerializePrivatePassword")
+	}
+
+	publicKeyBytes, err := getPublicKeyBytes(pk)
+	if err != nil {
+		return
+	}
+
+	plaintextPrivateKeyBytes, err := getPrivateKeyBytes(pk)
+	if err != nil {
+		return
+	}
+
+	plaintextSha1 := makeSha1Hash(plaintextPrivateKeyBytes)
+
+	encryptionHeaderBytes, symmetricKey, err := getS2KHeaderAndSymmetricKey(
+		[]byte(password),
+		cipher,
+	)
+	if err != nil {
+		return
+	}
+
+	// TODO: use config.Random()
+	initialVectorBytes, err := getRandomBytes(cipher.blockSize(), rand.Reader)
+	if err != nil {
+		return
+	}
+
+	plaintextBuf := bytes.NewBuffer(nil)
+	plaintextBuf.Write(plaintextPrivateKeyBytes)
+	plaintextBuf.Write(plaintextSha1)
+	plaintext := plaintextBuf.Bytes()
+
+	encryptedPrivateKeyAndSha1Bytes, err := symmetricEncrypt(
+		plaintext,
+		cipher,
+		symmetricKey,
+		initialVectorBytes,
+	)
+
+	if err != nil {
+		return
+	}
+
+	ptype := getPrivateKeyPacketType(pk)
+
+	s2kUsageBytes := []byte{byte(S2KUsageConventionEncryptedSha1)}
+
+	err = serializeHeader(w, ptype, len(publicKeyBytes)+len(s2kUsageBytes)+len(encryptionHeaderBytes)+len(initialVectorBytes)+len(encryptedPrivateKeyAndSha1Bytes))
+
+	if err != nil {
+		return
+	}
+	_, err = w.Write(publicKeyBytes)
+	if err != nil {
+		return
+	}
+
+	_, err = w.Write(s2kUsageBytes)
+	if err != nil {
+		return
+	}
+
+	_, err = w.Write(encryptionHeaderBytes)
+	if err != nil {
+		return
+	}
+
+	_, err = w.Write(initialVectorBytes)
+	if err != nil {
+		return
+	}
+
+	_, err = w.Write(encryptedPrivateKeyAndSha1Bytes)
+	if err != nil {
+		return
+	}
+
+	return
+}
 
 func getPrivateKeyPacketType(pk *PrivateKey) (ptype packetType) {
 	if pk.IsSubkey {
@@ -213,6 +336,89 @@ func getPrivateKeyPacketType(pk *PrivateKey) (ptype packetType) {
 		ptype = packetTypePrivateKey
 	}
 	return
+}
+
+func getRandomBytes(count int, rand io.Reader) (randomBytes []byte, err error) {
+	randomBytes = make([]byte, count)
+	_, err = rand.Read(randomBytes)
+	return randomBytes, err
+}
+
+func makeSha1Hash(inputBytes []byte) []byte {
+	h := sha1.New()
+	h.Write(inputBytes)
+	return h.Sum(nil)
+}
+
+func symmetricEncrypt(
+	inputPlaintext []byte,
+	cipherFunc CipherFunction,
+	symmetricKey []byte,
+	initialVector []byte,
+) (ciphertext []byte, err error) {
+
+	if cipherFunc.KeySize() != len(symmetricKey) {
+		return nil, errors.InvalidArgumentError(fmt.Sprintf("makeSymmetricEncryptor: bad key length %v, expected %v for algorithm %v", len(symmetricKey), cipherFunc.KeySize(), cipherFunc))
+	}
+
+	if len(initialVector) != cipherFunc.blockSize() {
+		return nil, errors.InvalidArgumentError("makeSymmetricEncryptor: bad length IV")
+	}
+
+	block := cipherFunc.new(symmetricKey)
+
+	encryptorStream := cipher.NewCFBEncrypter(block, initialVector)
+
+	ciphertext = make([]byte, len(inputPlaintext))
+	encryptorStream.XORKeyStream(ciphertext, inputPlaintext)
+
+	return ciphertext, nil
+}
+
+func getS2KHeaderAndSymmetricKey(password []byte, cipherFunc CipherFunction) (header []byte, symmetricKey []byte, err error) {
+	rand := rand.Reader // TODO: use config.Random() or pass in rand
+
+	keySize := cipherFunc.KeySize()
+
+	if keySize == 0 {
+		return nil, nil, errors.UnsupportedError("unknown cipher: " + strconv.Itoa(int(cipherFunc)))
+	}
+
+	s2kBuf := new(bytes.Buffer)
+	passwordDerivedKey := make([]byte, keySize)
+
+	config := s2k.Config{
+		S2KCount: s2k.S2KCountMax,
+		Hash:     crypto.SHA256,
+	}
+
+	// s2k.Serialize salts and stretches the passphrase, and writes the
+	// resulting key to passwordDerivedKey and the s2k descriptor to s2kBuf.
+
+	err = s2k.Serialize(
+		s2kBuf,
+		passwordDerivedKey,
+		rand,
+		password,
+		&config,
+	)
+	if err != nil {
+		return
+	}
+
+	headerBuf := bytes.NewBuffer(nil)
+
+	_, err = headerBuf.Write([]byte{byte(cipherFunc)})
+	if err != nil {
+		return
+	}
+
+	_, err = headerBuf.Write(s2kBuf.Bytes())
+	if err != nil {
+		return
+	}
+
+	return headerBuf.Bytes(), passwordDerivedKey, nil
 }
 
 func getPublicKeyBytes(pk *PrivateKey) (b []byte, err error) {
@@ -224,6 +430,7 @@ func getPublicKeyBytes(pk *PrivateKey) (b []byte, err error) {
 	return buf.Bytes(), nil
 }
 
+// TODO: remove this, since it's only used for the unencrypted case
 func getPrivateKeyHeaderBytes(pk *PrivateKey) (b []byte, err error) {
 	buf := bytes.NewBuffer(nil)
 	buf.WriteByte(0 /* no encryption */)
