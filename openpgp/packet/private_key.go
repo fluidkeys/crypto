@@ -12,6 +12,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/sha1"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -122,7 +123,7 @@ func (pk *PrivateKey) parse(r io.Reader) (err error) {
 			pk.sha1Checksum = true
 		}
 	default:
-		return errors.UnsupportedError("deprecated s2k function in private key")
+		return errors.UnsupportedError(fmt.Sprintf("deprecated s2k function in private key, s2kType: %v", s2kType))
 	}
 
 	if pk.Encrypted {
@@ -308,7 +309,7 @@ func (pk *PrivateKey) Decrypt(passphrase []byte) error {
 		h.Write(data[:len(data)-sha1.Size])
 		sum := h.Sum(nil)
 		if !bytes.Equal(sum, data[len(data)-sha1.Size:]) {
-			return errors.StructuralError("private key checksum failure")
+			return errors.StructuralError("private key sha1 failure")
 		}
 		data = data[:len(data)-sha1.Size]
 	} else {
