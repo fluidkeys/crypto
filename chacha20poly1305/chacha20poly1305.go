@@ -4,7 +4,7 @@
 
 // Package chacha20poly1305 implements the ChaCha20-Poly1305 AEAD as specified in RFC 7539,
 // and its extended nonce variant XChaCha20-Poly1305.
-package chacha20poly1305 // import "golang.org/x/crypto/chacha20poly1305"
+package chacha20poly1305 // import "github.com/fluidkeys/crypto/chacha20poly1305"
 
 import (
 	"crypto/cipher"
