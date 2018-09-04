@@ -13,6 +13,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"hash"
 	"io"
 	"testing"
@@ -74,6 +75,88 @@ func populateHash(hashFunc crypto.Hash, msg []byte) (hash.Hash, error) {
 	return h, nil
 }
 
+func TestPrivateKeySerialize(t *testing.T) {
+	priv, err := loadTestRSAPrivateKey()
+
+	if err != nil {
+		t.Fatalf("failed to make test private key: %v", err)
+	}
+
+	t.Run("serialize", func(t *testing.T) {
+		b := bytes.NewBuffer(nil)
+
+		if err := priv.Serialize(b, &Config{}); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestPrivateKeySerializeEncrypted(t *testing.T) {
+	priv, err := loadTestRSAPrivateKey()
+
+	if err != nil {
+		t.Fatalf("failed to make test private key: %v", err)
+	}
+
+	t.Run("serialize with an encryption password", func(t *testing.T) {
+		serialized := bytes.NewBuffer(nil)
+		config := Config{SerializePrivatePassword: "foo"}
+
+		if err := priv.Serialize(serialized, &config); err != nil {
+			t.Fatal(err)
+		}
+
+		// now try to decrypt again
+		p, err := Read(serialized)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		priv, ok := p.(*PrivateKey)
+		if !ok {
+			t.Errorf("didn't parse private key")
+		}
+
+		if !priv.Encrypted {
+			t.Errorf("re-serialized private key apparently isn't encrypted")
+		}
+
+		if !priv.sha1Checksum {
+			t.Errorf("re-serialized private key has sha1Checksum = false")
+		}
+
+		err = priv.Decrypt([]byte("foo"))
+		if err != nil {
+			t.Fatalf("failed to Decrypt re-loaded key: %v", err)
+		}
+	})
+}
+
+func loadTestRSAPrivateKey() (priv *PrivateKey, err error) {
+	privKeyDER, _ := hex.DecodeString(pkcs1PrivKeyHex)
+	rsaPriv, err := x509.ParsePKCS1PrivateKey(privKeyDER)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := NewRSAPrivateKey(time.Now(), rsaPriv).Serialize(&buf, &Config{}); err != nil {
+		return nil, err
+	}
+
+	p, err := Read(&buf)
+	if err != nil {
+		return nil, err
+	}
+
+	priv, ok := p.(*PrivateKey)
+	if !ok {
+		return nil, errors.New("didn't parse private key")
+	}
+	return priv, nil
+}
+
 func TestRSAPrivateKey(t *testing.T) {
 	privKeyDER, _ := hex.DecodeString(pkcs1PrivKeyHex)
 	rsaPriv, err := x509.ParsePKCS1PrivateKey(privKeyDER)
@@ -82,7 +165,7 @@ func TestRSAPrivateKey(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := NewRSAPrivateKey(time.Now(), rsaPriv).Serialize(&buf); err != nil {
+	if err := NewRSAPrivateKey(time.Now(), rsaPriv).Serialize(&buf, &Config{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,6 +199,7 @@ func TestRSAPrivateKey(t *testing.T) {
 	if err := priv.VerifySignature(h, sig); err != nil {
 		t.Fatal(err)
 	}
+
 }
 
 func TestECDSAPrivateKey(t *testing.T) {
@@ -125,7 +209,7 @@ func TestECDSAPrivateKey(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := NewECDSAPrivateKey(time.Now(), ecdsaPriv).Serialize(&buf); err != nil {
+	if err := NewECDSAPrivateKey(time.Now(), ecdsaPriv).Serialize(&buf, &Config{}); err != nil {
 		t.Fatal(err)
 	}
 

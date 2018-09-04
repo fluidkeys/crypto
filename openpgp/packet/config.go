@@ -46,6 +46,8 @@ type Config struct {
 	// RSABits is the number of bits in new RSA keys made with NewEntity.
 	// If zero, then 2048 bit keys are created.
 	RSABits int
+
+	SerializePrivatePassword string
 }
 
 func (c *Config) Random() io.Reader {

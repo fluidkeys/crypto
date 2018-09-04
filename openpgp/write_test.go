@@ -99,7 +99,7 @@ func TestNewEntity(t *testing.T) {
 	}
 
 	w := bytes.NewBuffer(nil)
-	if err := e.SerializePrivate(w, nil); err != nil {
+	if err := e.SerializePrivate(w, &packet.Config{}); err != nil {
 		t.Errorf("failed to serialize entity: %s", err)
 		return
 	}
@@ -116,7 +116,7 @@ func TestNewEntity(t *testing.T) {
 	}
 
 	w = bytes.NewBuffer(nil)
-	if err := e.SerializePrivate(w, nil); err != nil {
+	if err := e.SerializePrivate(w, &packet.Config{}); err != nil {
 		t.Errorf("failed to serialize entity second time: %s", err)
 		return
 	}
