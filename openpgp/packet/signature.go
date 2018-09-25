@@ -727,7 +727,7 @@ func (sig *Signature) buildSubpackets() (subpackets []outputSubpacket) {
 		subpackets = append(subpackets, outputSubpacket{true, prefCompressionSubpacket, false, sig.PreferredCompression})
 	}
 
-	if sig.SigType == SigTypeKeyRevocation {
+	if sig.SigType == SigTypeKeyRevocation || sig.SigType == SigTypeSubkeyRevocation {
 		reasonForRevData := bytes.NewBuffer(nil)
 		reasonForRevData.Write([]byte{*sig.RevocationReason})
 		reasonForRevData.Write([]byte(sig.RevocationReasonText))
