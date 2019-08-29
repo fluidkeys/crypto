@@ -243,11 +243,25 @@ encryption  |   Iterated and salted string-to-key(s2k 3):
 */
 
 func (pk *PrivateKey) SerializeEncrypted(w io.Writer, config *Config) (err error) {
-	cipher := CipherAES128 // TODO: don't hardcode, get from Config?
+	cipher := CipherAES128
+	hash := crypto.SHA256
 	password := config.SerializePrivatePassword
+	count := s2k.S2KCountMax
+
+	if config != nil && config.DefaultCipher != 0 {
+		cipher = config.DefaultCipher
+	}
+
+	if config != nil && config.DefaultHash != 0 {
+		hash = config.DefaultHash
+	}
 
 	if password == "" {
 		return errors.InvalidArgumentError("SerializeEncrypted called with empty config.SerializePrivatePassword")
+	}
+
+	if config != nil && config.S2KCount >= s2k.S2KCountMin && config.S2KCount <= s2k.S2KCountMax {
+		count = config.S2KCount
 	}
 
 	publicKeyBytes, err := getPublicKeyBytes(pk)
@@ -265,6 +279,10 @@ func (pk *PrivateKey) SerializeEncrypted(w io.Writer, config *Config) (err error
 	encryptionHeaderBytes, symmetricKey, err := getS2KHeaderAndSymmetricKey(
 		[]byte(password),
 		cipher,
+		&s2k.Config{
+			S2KCount: count,
+			Hash:     hash,
+		},
 	)
 	if err != nil {
 		return
@@ -375,7 +393,7 @@ func symmetricEncrypt(
 	return ciphertext, nil
 }
 
-func getS2KHeaderAndSymmetricKey(password []byte, cipherFunc CipherFunction) (header []byte, symmetricKey []byte, err error) {
+func getS2KHeaderAndSymmetricKey(password []byte, cipherFunc CipherFunction, config *s2k.Config) (header []byte, symmetricKey []byte, err error) {
 	rand := rand.Reader // TODO: use config.Random() or pass in rand
 
 	keySize := cipherFunc.KeySize()
@@ -387,11 +405,6 @@ func getS2KHeaderAndSymmetricKey(password []byte, cipherFunc CipherFunction) (he
 	s2kBuf := new(bytes.Buffer)
 	passwordDerivedKey := make([]byte, keySize)
 
-	config := s2k.Config{
-		S2KCount: s2k.S2KCountMax,
-		Hash:     crypto.SHA256,
-	}
-
 	// s2k.Serialize salts and stretches the passphrase, and writes the
 	// resulting key to passwordDerivedKey and the s2k descriptor to s2kBuf.
 
@@ -400,7 +413,7 @@ func getS2KHeaderAndSymmetricKey(password []byte, cipherFunc CipherFunction) (he
 		passwordDerivedKey,
 		rand,
 		password,
-		&config,
+		config,
 	)
 	if err != nil {
 		return
